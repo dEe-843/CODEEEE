@@ -136,3 +136,466 @@ const struct fsdata_file file_index_html[] = {
 
 #define FS_ROOT file_index_html
 #define FS_NUMFILES 1
+
+
+
+
+
+
+// Creation of the project 
+
+Great! Here's how you can **create, integrate, and run a web page on your PIC32 microcontroller using lwIP**, with steps to connect it via an IP address:
+
+---
+
+## ✅ Prerequisites
+- MPLAB X IDE and XC32 compiler installed
+- Your PIC32 project created and configured
+- `lwIP` stack ported (your `lwip_port_pic32-master.zip` looks good)
+- Ethernet interface (like LAN8720 or ENC28J60) properly configured
+- A known static IP or DHCP working
+
+---
+
+## 📁 1. Files to Add to Your Project
+
+Add these files to your project in MPLAB X under `Source Files` or create a folder like `lwip_web`:
+
+- `main.c` – handles networking and runs the HTTP server  
+- `fsdata.c` – contains embedded web page in C array format  
+- `fsdata.h` – declares the `fsdata_file` struct used by lwIP  
+
+You can also add your `index.html` for reference, but it’s already embedded in `fsdata.c`.
+
+---
+
+## 🛠️ 2. Project Setup in MPLAB X
+
+### a. **Add lwIP to the project**
+Ensure the following are added and compiled:
+- Core lwIP files (`core`, `netif`, `apps/httpd`)
+- `ethernetif.c` and its header (this is your HAL for MAC + PHY)
+
+### b. **Include paths**
+Set up include paths:
+```
+Project Properties > XC32 > Compiler > Include directories:
+- ../lwip/src/include
+- ../lwip/port
+- ../lwip/apps/httpd
+```
+
+### c. **Link your files**
+Add these files into the project:
+```c
+main.c
+fsdata.c
+fsdata.h
+```
+
+### d. **Enable the HTTP server**
+Define this in `lwipopts.h`:
+```c
+#define LWIP_HTTPD                 1
+#define HTTPD_USE_CUSTOM_FSDATA   1
+```
+
+---
+
+## 🔌 3. Connect the PIC32 to Your Network
+
+Make sure:
+- Ethernet is connected to your router or PC
+- The IP address configured in `main.c` (e.g., `192.168.1.123`) is compatible with your network
+- You are not behind a strict firewall
+
+---
+
+## ▶️ 4. Build and Flash
+
+- Build the project in MPLAB X
+- Flash the hex to your PIC32 using a debugger (like PICKit3/4, ICD4, or Snap)
+- Open a UART terminal (e.g., TeraTerm, PuTTY) to see console logs from `printf()` (if routed properly)
+
+You should see:
+```
+Network initialized with IP: 192.168.1.123
+```
+
+---
+
+## 🌐 5. Access from Your Browser
+
+Once running:
+1. Make sure your PC is on the same network (e.g., `192.168.1.x`)
+2. Open a browser and go to:
+   ```
+   http://192.168.1.123
+   ```
+3. You should see your embedded web page:
+   ```
+   Hello from PIC32!
+   ```
+
+
+
+// version 4
+Thanks for confirming! MPLAB X IDE v4.70 is a bit older, but still capable of working with PIC32 and lwIP. Here’s a full step-by-step tailored for **MPLAB X v4.70** with **lwIP and HTTP server on PIC32**.
+
+---
+
+## ✅ Step-by-Step for MPLAB X v4.70 + PIC32 + lwIP Web Server
+
+---
+
+### 📁 1. Project Structure
+
+Inside your MPLAB project, create folders like this:
+```
+MyProject/
+│
+├── main.c               ← System init + lwIP + web server start
+├── fsdata.c             ← Contains web page content as C array
+├── fsdata.h             ← Declares `fsdata_file` struct
+├── index.html           ← (Optional reference)
+│
+├── lwip/                ← Add lwIP source files
+│   ├── core/
+│   ├── netif/
+│   ├── include/
+│   ├── apps/httpd/
+│   └── port/            ← Add Ethernet HAL: `ethernetif.c`, `ethernetif.h`
+```
+
+---
+
+### 🔧 2. Project Configuration in MPLAB X v4.70
+
+#### a. Add source files:
+Right-click on **Source Files → Add Existing Items**:
+- Add `main.c`, `fsdata.c`, and `fsdata.h`
+
+#### b. Add include directories:
+Right-click project → **Properties → XC32 → Compiler → Include Directories**:
+```
+../lwip/include
+../lwip/core
+../lwip/netif
+../lwip/apps/httpd
+../lwip/port
+```
+
+#### c. Modify `lwipopts.h`:
+Make sure these are set:
+```c
+#define LWIP_HTTPD               1
+#define HTTPD_USE_CUSTOM_FSDATA 1
+#define NO_SYS                   1
+#define LWIP_SOCKET              0
+#define LWIP_NETCONN             0
+```
+
+---
+
+### 🧠 3. Configure IP Address (Static)
+
+In your `main.c`, set the IP manually:
+```c
+ip4_addr_t ipaddr, netmask, gw;
+IP4_ADDR(&ipaddr, 192,168,1,123);   // Static IP
+IP4_ADDR(&netmask, 255,255,255,0);
+IP4_ADDR(&gw, 192,168,1,1);         // Your router
+```
+
+You’ll see this IP in your browser after programming.
+
+---
+
+### 🔌 4. Connect Hardware
+
+- Connect Ethernet cable to PIC32’s PHY (LAN8720/ENC28J60)
+- Use a PICKit3/4 or ICD4 to flash
+- Open UART terminal at 115200 to see debug output
+- Supply 3.3V power
+
+---
+
+### ▶️ 5. Build & Program
+
+- Click **Clean and Build** in MPLAB X
+- Click **Make and Program Device**
+- Monitor UART for messages like:
+  ```
+  IP Address: 192.168.1.123
+  HTTP Server started...
+  ```
+
+---
+
+### 🌐 6. Access from Web Browser
+
+- Ensure your PC is on same network (e.g. 192.168.1.x)
+- Open browser and go to:
+  ```
+  http://192.168.1.123
+  ```
+
+You should see the HTML content:
+> Hello from PIC32! This is a test page served by the PIC32 using lwIP.
+
+---
+
+### 🧰 Optional: Use DHCP Instead of Static
+
+In `main.c`, replace static IP lines with:
+```c
+dhcp_start(&netif);
+```
+Ensure:
+```c
+#define LWIP_DHCP 1
+```
+
+///
+
+Great question! Here’s how and **where to create the `fsdata.c` and `fsdata.h`** files on your system, and how to integrate them into your MPLAB X v4.70 project for your PIC32 lwIP web server.
+
+---
+
+## ✅ Step-by-Step: Create `fsdata.c` and `fsdata.h` on Your System
+
+---
+
+### 📁 1. Create a Folder for Your Web Files
+
+Let’s assume your project is in:
+
+```
+C:\MPLABXProjects\PIC32_WebServer\
+```
+
+Inside that, create a new folder:
+
+```
+C:\MPLABXProjects\PIC32_WebServer\webpages\
+```
+
+Put your web files (e.g., `index.html`) there:
+```
+C:\MPLABXProjects\PIC32_WebServer\webpages\index.html
+```
+
+---
+
+### 🛠️ 2. Create `fsdata.c` and `fsdata.h` in Project Source Folder
+
+Create two new files in the `Source Files` directory of your project:
+
+- `C:\MPLABXProjects\PIC32_WebServer\fsdata.c`
+- `C:\MPLABXProjects\PIC32_WebServer\fsdata.h`
+
+Or, do it directly from **MPLAB X**:
+1. Right-click on **Source Files**
+2. Click **New > C Source File** → Name it `fsdata.c`
+3. Do the same for `fsdata.h`
+
+---
+
+### 📄 3. Paste the `fsdata` Code
+
+Here’s a minimal example to paste into those files:
+
+#### 🔹 fsdata.h
+```c
+#ifndef FSDATA_H
+#define FSDATA_H
+
+struct fsdata_file {
+    const struct fsdata_file *next;
+    const unsigned char *name;
+    const unsigned char *data;
+    int len;
+};
+
+extern const struct fsdata_file file_index_html[];
+
+#define FS_ROOT file_index_html
+#define FS_NUMFILES 1
+
+#endif
+```
+
+#### 🔹 fsdata.c
+```c
+#include "fsdata.h"
+
+static const unsigned char data_index_html[] = {
+    /* "/index.html" path name + null */
+    0x2f, 0x69, 0x6e, 0x64, 0x65, 0x78, 0x2e, 0x68,
+    0x74, 0x6d, 0x6c, 0x00,
+    /* HTML content */
+    0x3c, 0x68, 0x74, 0x6d, 0x6c, 0x3e,
+    0x3c, 0x62, 0x6f, 0x64, 0x79, 0x3e,
+    0x3c, 0x68, 0x31, 0x3e,
+    0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20,
+    0x66, 0x72, 0x6f, 0x6d, 0x20,
+    0x50, 0x49, 0x43, 0x33, 0x32, 0x21,
+    0x3c, 0x2f, 0x68, 0x31, 0x3e,
+    0x3c, 0x2f, 0x62, 0x6f, 0x64, 0x79,
+    0x3e, 0x3c, 0x2f, 0x68, 0x74, 0x6d,
+    0x6c, 0x3e
+};
+
+const struct fsdata_file file_index_html[] = {
+    {
+        NULL,
+        data_index_html,
+        data_index_html + 12,
+        sizeof(data_index_html) - 12
+    }
+};
+```
+
+This is enough to show a simple web page saying **"Hello from PIC32!"**
+
+---
+
+## 🔗 4. Link the Files in MPLAB X v4.70
+
+Once files are saved:
+- Right-click on **Source Files → Add Existing Item**
+- Add both `fsdata.c` and `fsdata.h`
+
+---
+
+## 📌 Summary
+
+| File | Where to create | Purpose |
+|------|------------------|---------|
+| `index.html` | `webpages/` folder | Your actual web content |
+| `fsdata.c` | Main project folder | Web content as C array |
+| `fsdata.h` | Main project folder | Declares structure for lwIP FS |
+
+---
+
+///
+
+Perfect — you're very close now! After creating `fsdata.c`, `fsdata.h`, and your project files, here’s how to **build, program, and run** the lwIP web server on your **PIC32** using **MPLAB X v4.70**.
+
+---
+
+## ✅ Final Steps: How to Run the Web Server on PIC32
+
+---
+
+### 🛠️ 1. Add Files to Your Project
+
+In **MPLAB X v4.70**:
+
+1. Right-click **Source Files** → Add:
+   - `main.c`
+   - `fsdata.c`
+2. Right-click **Header Files** → Add:
+   - `fsdata.h`
+3. Make sure all `lwIP` source files are included:
+   - `lwip/core`
+   - `lwip/netif`
+   - `lwip/apps/httpd`
+   - `port` files: `ethernetif.c`, `ethernetif.h`
+
+---
+
+### ⚙️ 2. Check Compiler and Linker Settings
+
+#### ➤ Include Paths:
+Go to **Project Properties** → `XC32 Compiler → Include directories`:
+```
+../lwip/include
+../lwip/core
+../lwip/netif
+../lwip/apps/httpd
+../lwip/port
+```
+
+#### ➤ Preprocessor Definitions:
+Also define in compiler settings:
+```c
+LWIP_HTTPD=1
+HTTPD_USE_CUSTOM_FSDATA=1
+NO_SYS=1
+```
+
+If using static IP, no need for RTOS or `tcpip_thread`.
+
+---
+
+### 🧠 3. Static IP Configuration (main.c)
+
+Inside your `main.c`:
+```c
+ip4_addr_t ipaddr, netmask, gw;
+
+// Use an IP that matches your network
+IP4_ADDR(&ipaddr, 192,168,1,123);
+IP4_ADDR(&netmask, 255,255,255,0);
+IP4_ADDR(&gw, 192,168,1,1);
+
+netif_add(&netif, &ipaddr, &netmask, &gw, NULL, ethernetif_init, ethernet_input);
+netif_set_default(&netif);
+netif_set_up(&netif);
+
+httpd_init();  // Start HTTP Server
+```
+
+---
+
+### 🔌 4. Hardware Setup
+
+Make sure:
+
+| Component | Status |
+|----------|--------|
+| Ethernet PHY | Connected via RMII (e.g., LAN8720 or ENC28J60) |
+| RJ45 Jack | Plugged into your router |
+| MCU Power | 3.3V stable |
+| UART Debug | Optional (for IP printout) |
+
+---
+
+### 🧪 5. Build and Flash
+
+In MPLAB:
+- Click **Clean and Build Project**
+- Click **Make and Program Device**
+- Use your PICkit3/4 or ICD to flash the PIC32
+
+---
+
+### 📡 6. Connect to the Web Page
+
+Once programmed:
+
+1. Connect your PC to the **same network/router** as the PIC32
+2. Open a browser and go to:
+   ```
+   http://192.168.1.123
+   ```
+
+You should see:
+
+> **Hello from PIC32!**  
+> (or whatever was in your `index.html`)
+
+✅ If you see the page — your lwIP HTTP server is running on your microcontroller!
+
+---
+
+### 🔍 Optional Debug (UART)
+
+If you want to print IP for confirmation:
+```c
+#include <stdio.h>
+printf("IP Address: %s\n", ip4addr_ntoa(&ipaddr));
+```
+
+---
