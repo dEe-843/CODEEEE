@@ -1,0 +1,81 @@
+#include <stdio.h>
+
+int touchDetected()
+{
+    int t;
+    printf("Touch? (1=yes, 0=no): ");
+    scanf("%d", &t);
+    return t;
+}
+
+void delay1s()
+{
+    for (volatile long i = 0; i < 300000000; i++); // approx 1 sec
+}
+
+int main()
+{
+    int counter = 0;
+    int prev = -1;
+
+    int screen_on = 1;
+    int logout_page = 0;
+
+    int timeout_seconds = 5;    // user idle timeout
+    int logout_wait = 3;        // show logout page for few seconds
+    int idle_count = 0;         // counts seconds with no touch
+
+    while (screen_on)
+    {
+        prev = counter;
+        counter++;
+
+        printf("\nPrev: %d  Curr: %d\n", prev, counter);
+
+        // -------------------- Touch Check --------------------
+        if (touchDetected())
+        {
+            printf("User touched! Reset idle counter.\n");
+            idle_count = 0;
+        }
+        else
+        {
+            idle_count++;
+            printf("No touch for %d sec\n", idle_count);
+        }
+
+        // ------------------ Screen Timeout -------------------
+        if (idle_count >= timeout_seconds)
+        {
+            printf("\n*** TIMEOUT! Going to logout page ***\n");
+            logout_page = 1;
+            break;
+        }
+
+        delay1s();
+    }
+
+    // =====================================================
+    //                LOGOUT PAGE
+    // =====================================================
+    if (logout_page)
+    {
+        printf("\n===== LOGOUT PAGE =====\n");
+
+        for (int i = 0; i < logout_wait; i++)
+        {
+            prev = counter;
+            counter++;
+
+            printf("Logout Page | Prev: %d  Curr: %d\n",
+                   prev, counter);
+
+            delay1s();
+        }
+
+        printf("\nScreen turning OFF...\n");
+        screen_on = 0;
+    }
+
+    return 0;
+}
