@@ -79,3 +79,93 @@ int main()
 
     return 0;
 }
+
+
+
+#include "definitions.h"    // Harmony headers
+
+bool TouchDetected(void)
+{
+    // Replace with actual touch input
+    return (PORTBbits.RB5 == 1);
+}
+
+int main(void)
+{
+    SYS_Initialize(NULL);
+
+    uint32_t prev_sec = 0;
+    uint32_t curr_sec = 0;
+
+    uint32_t start_sec = 0;
+    uint32_t idle_timeout = 10;    // 10s timeout
+    uint32_t logout_wait = 5;      // show logout for 5s
+
+    bool logout_page = false;
+    bool running = true;
+
+    // ----------- Get Base Start Time from RTC -----------
+    RTC_TimeGet(&curr_sec);
+    prev_sec = curr_sec;
+    start_sec = curr_sec;
+
+    while (running)
+    {
+        // Read current RTC second
+        RTC_TimeGet(&curr_sec);
+
+        // Print only when second changes
+        if (curr_sec != prev_sec)
+        {
+            printf("Prev: %lu   Curr: %lu\n", prev_sec, curr_sec);
+
+            // ---------------- TOUCH CHECK ----------------
+            if (TouchDetected())
+            {
+                printf("Touch! Timeout Reset\n");
+                start_sec = curr_sec;   // reset timeout
+            }
+
+            // -------------- TIMEOUT CHECK ----------------
+            if ((curr_sec - start_sec) >= idle_timeout)
+            {
+                printf("\n*** Timeout! Going to logout page ***\n");
+                logout_page = true;
+                break;
+            }
+
+            prev_sec = curr_sec;
+        }
+    }
+
+    // ======================================================
+    //                     LOGOUT PAGE
+    // ======================================================
+    if (logout_page)
+    {
+        printf("\n===== LOGOUT PAGE =====\n");
+
+        uint32_t logout_start;
+        RTC_TimeGet(&logout_start);
+
+        while (1)
+        {
+            RTC_TimeGet(&curr_sec);
+
+            if (curr_sec != prev_sec)
+            {
+                printf("Logout | Prev: %lu  Curr: %lu\n",
+                       prev_sec, curr_sec);
+                prev_sec = curr_sec;
+            }
+
+            if ((curr_sec - logout_start) >= logout_wait)
+                break;
+        }
+
+        printf("\nScreen turning OFF...\n");
+    }
+
+    while (1);
+    return 0;
+}
