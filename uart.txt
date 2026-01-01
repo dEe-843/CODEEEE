@@ -1,0 +1,891 @@
+Below is a clean, practical PIC32 (UART3) C example that matches what you described and is easy to integrate with a Qt GUI that already uses serial communication.
+
+I’ll assume:
+
+PIC32 using XC32 (no Harmony to keep it simple)
+
+UART3 used
+
+Command-based protocol
+
+GUI selects files and responds with ACK
+
+File transfer is initiated based on message type (0x01, 0x02, 0x03 …)
+
+1️⃣ Communication Protocol (Simple & Clear)
+Frame Format (PIC32 ↔ Qt GUI)
+[STX][CMD][LEN][DATA...][ETX]
+
+Field	Size	Description
+STX	1 byte	Start byte = 0x02
+CMD	1 byte	Command / Message type
+LEN	1 byte	Length of DATA
+DATA	N bytes	Payload
+ETX	1 byte	End byte = 0x03
+2️⃣ Command Definitions
+#define STX     0x02
+#define ETX     0x03
+
+#define CMD_FILE_SELECT   0x10   // PIC → GUI (ask GUI to select file)
+#define CMD_ACK           0x06   // GUI → PIC (acknowledgement)
+
+#define FILE_TYPE_1       0x01
+#define FILE_TYPE_2       0x02
+#define FILE_TYPE_3       0x03
+
+3️⃣ UART3 Initialization (PIC32)
+#include <xc.h>
+#include <stdint.h>
+
+#define PBCLK 40000000UL
+#define BAUDRATE 115200
+#define U3BRG_VAL ((PBCLK / (16 * BAUDRATE)) - 1)
+
+void UART3_Init(void)
+{
+    U3MODE = 0;
+    U3STA  = 0;
+
+    U3BRG = U3BRG_VAL;
+
+    U3MODEbits.PDSEL = 0;   // 8-bit, no parity
+    U3MODEbits.STSEL = 0;   // 1 stop bit
+
+    U3STAbits.UTXEN = 1;    // Enable TX
+    U3STAbits.URXEN = 1;    // Enable RX
+
+    U3MODEbits.ON = 1;      // Enable UART3
+}
+
+4️⃣ Basic UART Send / Receive
+void UART3_WriteByte(uint8_t data)
+{
+    while (U3STAbits.UTXBF);
+    U3TXREG = data;
+}
+
+uint8_t UART3_ReadByte(void)
+{
+    while (!U3STAbits.URXDA);
+    return U3RXREG;
+}
+
+void UART3_WriteBuffer(uint8_t *buf, uint16_t len)
+{
+    for (uint16_t i = 0; i < len; i++)
+        UART3_WriteByte(buf[i]);
+}
+
+5️⃣ Function to Send Command to GUI (File Select)
+void GUI_RequestFile(uint8_t fileType)
+{
+    uint8_t frame[5];
+
+    frame[0] = STX;
+    frame[1] = CMD_FILE_SELECT;
+    frame[2] = 1;          // Length
+    frame[3] = fileType;  // 0x01 / 0x02 / 0x03
+    frame[4] = ETX;
+
+    UART3_WriteBuffer(frame, sizeof(frame));
+}
+
+
+👉 Qt GUI logic
+
+Receives CMD_FILE_SELECT
+
+Opens file dialog based on fileType
+
+Sends ACK
+
+Sends file data afterward
+
+6️⃣ Receive ACK from GUI
+uint8_t GUI_WaitForAck(void)
+{
+    uint8_t rx;
+
+    rx = UART3_ReadByte();
+    if (rx != STX) return 0;
+
+    rx = UART3_ReadByte();
+    if (rx != CMD_ACK) return 0;
+
+    rx = UART3_ReadByte(); // LEN
+    rx = UART3_ReadByte(); // DATA (optional)
+
+    rx = UART3_ReadByte();
+    if (rx != ETX) return 0;
+
+    return 1; // ACK received
+}
+
+7️⃣ Receiving File from GUI (Stream)
+
+Example: GUI sends file in chunks
+
+#define FILE_BUFFER_SIZE 256
+uint8_t fileBuffer[FILE_BUFFER_SIZE];
+
+void GUI_ReceiveFile(uint16_t size)
+{
+    for (uint16_t i = 0; i < size; i++)
+    {
+        fileBuffer[i] = UART3_ReadByte();
+    }
+}
+
+8️⃣ Example Main Flow
+int main(void)
+{
+    UART3_Init();
+
+    // Request file type 0x01 from GUI
+    GUI_RequestFile(FILE_TYPE_1);
+
+    // Wait for ACK
+    if (GUI_WaitForAck())
+    {
+        // GUI will now send file
+        GUI_ReceiveFile(256); // example size
+    }
+
+    while (1);
+}
+
+9️⃣ Qt GUI Side (Concept Only)
+
+Qt serial code should:
+
+Detect CMD_FILE_SELECT
+
+Open file dialog
+
+Send CMD_ACK
+
+Stream file bytes via UART
+
+🔑 Key Advantages of This Design
+
+✔ Simple protocol
+✔ Easy to debug in serial terminal
+✔ Qt-friendly
+✔ Scalable for more commands
+
+If you want, I can:
+
+✅ Add CRC
+
+✅ Add interrupt-based UART
+
+✅ Provide Qt (C++ / QSerialPort) code
+
+✅ Add file chunking + checksum
+
+Just tell me 👍
+
+header 0-2 ,length 3-6,msg type 7 ,interface 8,date 9-12,time, footer 13-15 like this i have in c code for that i need to add the message type to access the file from gui by sending a command 0x01 and get that file from gui with ack/nack
+
+Got it 👍
+You already have a fixed frame format and you want to use msg type = 0x01 to request a file from the Qt GUI, then receive ACK / NACK and finally receive the file over UART3.
+
+I’ll strictly follow your frame layout and keep the code PIC32-friendly (simple C, no Harmony).
+
+📦 Your Frame Format (Confirmed)
+Byte Index	Field
+0–2	HEADER
+3–6	LENGTH
+7	MSG TYPE
+8	INTERFACE
+9–12	DATE
+13–15	FOOTER
+
+Total = 16 bytes (command frame)
+
+🧾 Definitions
+#define HEADER_0   0xAA
+#define HEADER_1   0x55
+#define HEADER_2   0xAA
+
+#define FOOTER_0   0x55
+#define FOOTER_1   0xAA
+#define FOOTER_2   0x55
+
+#define MSG_FILE_REQUEST   0x01
+#define MSG_ACK            0x06
+#define MSG_NACK           0x15
+
+#define INTERFACE_UART3    0x03
+
+🧱 Frame Structure (C)
+typedef struct
+{
+    uint8_t header[3];     // 0–2
+    uint32_t length;       // 3–6
+    uint8_t msgType;       // 7
+    uint8_t interface;    // 8
+    uint32_t date;         // 9–12
+    uint8_t footer[3];     // 13–15
+} __attribute__((packed)) UART_Frame_t;
+
+🔧 UART3 Send Helper
+void UART3_SendByte(uint8_t data)
+{
+    while (U3STAbits.UTXBF);
+    U3TXREG = data;
+}
+
+void UART3_SendBuffer(uint8_t *buf, uint16_t len)
+{
+    for (uint16_t i = 0; i < len; i++)
+        UART3_SendByte(buf[i]);
+}
+
+📤 Send FILE REQUEST Command (msgType = 0x01)
+void GUI_RequestFile(void)
+{
+    UART_Frame_t frame;
+
+    frame.header[0] = HEADER_0;
+    frame.header[1] = HEADER_1;
+    frame.header[2] = HEADER_2;
+
+    frame.length = 0x00000001;   // Only msgType info
+
+    frame.msgType   = MSG_FILE_REQUEST;   // 0x01
+    frame.interface = INTERFACE_UART3;
+
+    frame.date = 0x20250101;     // Example date
+
+    frame.footer[0] = FOOTER_0;
+    frame.footer[1] = FOOTER_1;
+    frame.footer[2] = FOOTER_2;
+
+    UART3_SendBuffer((uint8_t *)&frame, sizeof(frame));
+}
+
+
+➡ Qt GUI behavior
+
+If msgType == 0x01
+
+Open file dialog
+
+Send ACK or NACK
+
+📥 Receive ACK / NACK from GUI
+uint8_t GUI_WaitAck(void)
+{
+    UART_Frame_t rxFrame;
+
+    uint8_t *ptr = (uint8_t *)&rxFrame;
+
+    for (uint8_t i = 0; i < sizeof(UART_Frame_t); i++)
+    {
+        ptr[i] = UART3_ReadByte();
+    }
+
+    if (rxFrame.msgType == MSG_ACK)
+        return 1;
+
+    if (rxFrame.msgType == MSG_NACK)
+        return 0;
+
+    return 0;
+}
+
+📂 Receive File From GUI (After ACK)
+
+Qt GUI sends raw file data or chunked data
+
+#define FILE_CHUNK_SIZE 256
+uint8_t fileBuffer[FILE_CHUNK_SIZE];
+
+void GUI_ReceiveFile(uint32_t fileSize)
+{
+    for (uint32_t i = 0; i < fileSize; i++)
+    {
+        fileBuffer[i % FILE_CHUNK_SIZE] = UART3_ReadByte();
+
+        if ((i % FILE_CHUNK_SIZE) == (FILE_CHUNK_SIZE - 1))
+        {
+            // Process / store chunk
+        }
+    }
+}
+
+🔁 Main Flow (PIC32)
+int main(void)
+{
+    UART3_Init();
+
+    GUI_RequestFile();      // Send msgType 0x01
+
+    if (GUI_WaitAck())
+    {
+        // GUI accepted request
+        GUI_ReceiveFile(1024);   // Example file size
+    }
+    else
+    {
+        // GUI rejected request
+    }
+
+    while (1);
+}
+
+🖥️ Qt GUI Logic (High-Level)
+
+Receive 16-byte frame
+
+Check msgType == 0x01
+
+Open file picker
+
+If success → send ACK (0x06)
+
+Send file bytes over serial
+
+Optional: send end-of-file frame
+
+🔐 Recommended (Next Step Enhancements)
+
+✔ Add CRC after footer
+✔ Add file size frame before data
+✔ Add chunk ACKs for reliability
+✔ Add timeout handling
+
+If you want, I can next:
+
+🔹 Write Qt QSerialPort C++ code
+
+🔹 Add CRC-16
+
+🔹 Convert this to interrupt-based UART
+
+🔹 Make state machine based receiver
+
+Just tell me what you want next 👌
+
+mp lab harmony uart 
+
+Below is a clear, Harmony-based UART example for PIC32 (MPLAB Harmony) that fits your fixed frame format and file request via message type (0x01) with ACK/NACK from a Qt GUI.
+
+I’ll keep it Harmony-style, UART3, non-blocking, and easy to integrate.
+
+📦 Your Frame Format (Harmony Compatible)
+Byte Index	Field
+0–2	HEADER
+3–6	LENGTH
+7	MSG TYPE
+8	INTERFACE
+9–12	DATE
+13–15	FOOTER
+
+Frame size = 16 bytes
+
+🧾 Macros
+#define FRAME_SIZE         16
+
+#define HEADER_0           0xAA
+#define HEADER_1           0x55
+#define HEADER_2           0xAA
+
+#define FOOTER_0           0x55
+#define FOOTER_1           0xAA
+#define FOOTER_2           0x55
+
+#define MSG_FILE_REQUEST   0x01
+#define MSG_ACK            0x06
+#define MSG_NACK           0x15
+
+#define INTERFACE_UART3    0x03
+
+🧱 Frame Structure
+typedef struct __attribute__((packed))
+{
+    uint8_t  header[3];     // 0–2
+    uint32_t length;        // 3–6
+    uint8_t  msgType;       // 7
+    uint8_t  interface;    // 8
+    uint32_t date;          // 9–12
+    uint8_t  footer[3];     // 13–15
+} UART_Frame_t;
+
+🔌 UART3 Initialization (Harmony)
+
+Assumes UART3 is already configured in MHC
+
+Baudrate: 115200
+
+TX/RX enabled
+
+Interrupt or polling mode
+
+No manual register init needed.
+
+📤 Send Frame (Harmony)
+void UART3_SendFrame(UART_Frame_t *frame)
+{
+    while (!UART3_Write((uint8_t *)frame, FRAME_SIZE));
+}
+
+📤 Send FILE REQUEST Command (msgType = 0x01)
+void GUI_RequestFile(void)
+{
+    UART_Frame_t frame;
+
+    frame.header[0] = HEADER_0;
+    frame.header[1] = HEADER_1;
+    frame.header[2] = HEADER_2;
+
+    frame.length = 1;  // Only msgType
+
+    frame.msgType   = MSG_FILE_REQUEST;
+    frame.interface = INTERFACE_UART3;
+
+    frame.date = 0x20250101;  // Example date
+
+    frame.footer[0] = FOOTER_0;
+    frame.footer[1] = FOOTER_1;
+    frame.footer[2] = FOOTER_2;
+
+    UART3_SendFrame(&frame);
+}
+
+📥 Receive ACK / NACK (Harmony)
+uint8_t uartRxBuf[FRAME_SIZE];
+
+bool GUI_WaitForAck(void)
+{
+    if (UART3_ReadCountGet() >= FRAME_SIZE)
+    {
+        UART3_Read(uartRxBuf, FRAME_SIZE);
+
+        UART_Frame_t *rx = (UART_Frame_t *)uartRxBuf;
+
+        if (rx->msgType == MSG_ACK)
+            return true;
+
+        if (rx->msgType == MSG_NACK)
+            return false;
+    }
+    return false;
+}
+
+📂 File Receive (After ACK)
+
+GUI sends file size first, then raw file bytes
+
+#define FILE_RX_CHUNK 256
+uint8_t fileRxBuf[FILE_RX_CHUNK];
+
+void GUI_ReceiveFile(uint32_t fileSize)
+{
+    uint32_t received = 0;
+
+    while (received < fileSize)
+    {
+        if (UART3_ReadCountGet())
+        {
+            uint32_t rxLen = UART3_Read(fileRxBuf, FILE_RX_CHUNK);
+            received += rxLen;
+
+            // Store / process file data here
+        }
+    }
+}
+
+🔁 Main State Flow (Harmony)
+typedef enum
+{
+    STATE_IDLE,
+    STATE_WAIT_ACK,
+    STATE_RECV_FILE
+} APP_STATE;
+
+APP_STATE appState = STATE_IDLE;
+
+void APP_Tasks(void)
+{
+    static uint32_t fileSize = 1024;
+
+    switch (appState)
+    {
+        case STATE_IDLE:
+            GUI_RequestFile();
+            appState = STATE_WAIT_ACK;
+            break;
+
+        case STATE_WAIT_ACK:
+            if (GUI_WaitForAck())
+                appState = STATE_RECV_FILE;
+            break;
+
+        case STATE_RECV_FILE:
+            GUI_ReceiveFile(fileSize);
+            appState = STATE_IDLE;
+            break;
+    }
+}
+
+🖥️ Qt GUI Expected Behavior
+
+Read 16-byte frame
+
+Check msgType == 0x01
+
+Open file dialog
+
+Send ACK (0x06) or NACK (0x15)
+
+Send file size
+
+Send file bytes via serial
+
+✅ Why This Works Well with Harmony
+
+✔ Non-blocking UART
+✔ Harmony-friendly API
+✔ Easy to add DMA
+✔ Works with Qt QSerialPort
+
+🔜 Want Next?
+
+I can:
+
+✅ Add CRC-16
+
+✅ Provide Qt (QSerialPort) C++ code
+
+✅ Convert to UART interrupt callback
+
+✅ Add file chunk ACK/NACK
+
+Just tell me 👍
+
+file size will be having 256,1024 also
+
+Perfect 👍
+That means file sizes are fixed and known in advance (either 256 bytes or 1024 bytes).
+So we don’t need a separate file-size frame — we can encode the file size in the message type itself. This is very common in embedded ↔ GUI protocols.
+
+Below is a clean MPLAB Harmony UART3 design adjusted exactly for this.
+
+📦 Updated Protocol (Based on Your Requirement)
+Message Type Mapping
+msgType	Meaning	File Size
+0x01	Request file	256 bytes
+0x02	Request file	1024 bytes
+0x06	ACK	—
+0x15	NACK	—
+
+✔ Qt GUI decides which file to send
+✔ PIC32 already knows file size from msgType
+
+🧾 Macros
+#define FRAME_SIZE 16
+
+#define MSG_FILE_256   0x01
+#define MSG_FILE_1024  0x02
+#define MSG_ACK        0x06
+#define MSG_NACK       0x15
+
+🧱 Frame Structure (unchanged)
+typedef struct __attribute__((packed))
+{
+    uint8_t  header[3];
+    uint32_t length;
+    uint8_t  msgType;
+    uint8_t  interface;
+    uint32_t date;
+    uint8_t  footer[3];
+} UART_Frame_t;
+
+📤 Request File From GUI (256 / 1024)
+void GUI_RequestFile(uint8_t msgType)
+{
+    UART_Frame_t frame;
+
+    frame.header[0] = 0xAA;
+    frame.header[1] = 0x55;
+    frame.header[2] = 0xAA;
+
+    frame.length = 1;   // msgType only
+
+    frame.msgType   = msgType;  // 0x01 or 0x02
+    frame.interface = 0x03;
+
+    frame.date = 0x20250101;
+
+    frame.footer[0] = 0x55;
+    frame.footer[1] = 0xAA;
+    frame.footer[2] = 0x55;
+
+    UART3_Write((uint8_t *)&frame, FRAME_SIZE);
+}
+
+📥 Receive ACK / NACK (Harmony)
+bool GUI_CheckAck(void)
+{
+    uint8_t rxBuf[FRAME_SIZE];
+
+    if (UART3_ReadCountGet() >= FRAME_SIZE)
+    {
+        UART3_Read(rxBuf, FRAME_SIZE);
+
+        UART_Frame_t *rx = (UART_Frame_t *)rxBuf;
+
+        if (rx->msgType == MSG_ACK)
+            return true;
+
+        if (rx->msgType == MSG_NACK)
+            return false;
+    }
+    return false;
+}
+
+📂 File Receive Function (Size Known)
+void GUI_ReceiveFile(uint16_t fileSize)
+{
+    uint16_t received = 0;
+    uint8_t fileBuf[256];
+
+    while (received < fileSize)
+    {
+        if (UART3_ReadCountGet())
+        {
+            uint32_t rx = UART3_Read(fileBuf, sizeof(fileBuf));
+            received += rx;
+
+            // Process / store data here
+        }
+    }
+}
+
+🔁 Harmony State Machine (Recommended)
+typedef enum
+{
+    APP_IDLE,
+    APP_WAIT_ACK,
+    APP_RECV_FILE
+} APP_STATE;
+
+APP_STATE appState = APP_IDLE;
+uint16_t expectedFileSize = 0;
+
+void APP_Tasks(void)
+{
+    switch (appState)
+    {
+        case APP_IDLE:
+            GUI_RequestFile(MSG_FILE_256);   // or MSG_FILE_1024
+            expectedFileSize = 256;
+            appState = APP_WAIT_ACK;
+            break;
+
+        case APP_WAIT_ACK:
+            if (GUI_CheckAck())
+                appState = APP_RECV_FILE;
+            break;
+
+        case APP_RECV_FILE:
+            GUI_ReceiveFile(expectedFileSize);
+            appState = APP_IDLE;
+            break;
+    }
+}
+
+🖥️ Qt GUI Logic (Very Simple)
+if (msgType == 0x01)
+    fileSize = 256;
+else if (msgType == 0x02)
+    fileSize = 1024;
+
+sendAck();
+sendFile(fileSize);
+
+✅ Why This Design Is Solid
+
+✔ No extra frames
+✔ Deterministic memory usage
+✔ Embedded-safe
+✔ Easy Qt implementation
+✔ No dynamic allocation
+
+🔜 Optional Improvements
+
+Add CRC at end of file
+
+Chunk ACK every 64 bytes
+
+Timeout + retry
+
+End-of-file frame
+
+If you want, I can draw a timing diagram, add CRC, or write the Qt QSerialPort code next.
+
+now clearly give me proper code in order such that i need a command function to send to gui qt code such that i can get reply of ack/nack and later i need to send a file 1 request to gui and gui should send me ack/nack with file also
+
+Below is a clean, ordered, end-to-end MPLAB Harmony UART3 solution that does exactly what you asked — no jumps, no assumptions.
+
+You will get:
+
+One command function → send request to Qt GUI
+
+Receive ACK / NACK
+
+If ACK → receive file (256 or 1024 bytes)
+
+Harmony-style, UART3, deterministic
+
+1️⃣ Protocol (FINAL & FIXED)
+Frame format (16 bytes)
+Bytes	Field
+0–2	HEADER (0xAA 0x55 0xAA)
+3–6	LENGTH
+7	MSG TYPE
+8	INTERFACE
+9–12	DATE
+13–15	FOOTER (0x55 0xAA 0x55)
+Message Types
+#define MSG_FILE_256    0x01   // Request 256-byte file
+#define MSG_FILE_1024   0x02   // Request 1024-byte file
+#define MSG_ACK         0x06
+#define MSG_NACK        0x15
+
+2️⃣ Required Includes (Harmony)
+#include "definitions.h"   // Harmony UART3
+#include <stdint.h>
+#include <stdbool.h>
+
+3️⃣ Frame Structure
+#define FRAME_SIZE 16
+
+typedef struct __attribute__((packed))
+{
+    uint8_t  header[3];
+    uint32_t length;
+    uint8_t  msgType;
+    uint8_t  interface;
+    uint32_t date;
+    uint8_t  footer[3];
+} UART_Frame_t;
+
+4️⃣ UART3 Send Frame Function
+void UART3_SendFrame(UART_Frame_t *frame)
+{
+    while (!UART3_Write((uint8_t *)frame, FRAME_SIZE));
+}
+
+5️⃣ COMMAND FUNCTION (SEND REQUEST TO GUI)
+
+✅ THIS is the function you call to talk to Qt GUI
+
+void GUI_SendFileRequest(uint8_t msgType)
+{
+    UART_Frame_t frame;
+
+    frame.header[0] = 0xAA;
+    frame.header[1] = 0x55;
+    frame.header[2] = 0xAA;
+
+    frame.length = 1;
+
+    frame.msgType   = msgType;      // 0x01 or 0x02
+    frame.interface = 0x03;         // UART3
+
+    frame.date = 0x20250101;
+
+    frame.footer[0] = 0x55;
+    frame.footer[1] = 0xAA;
+    frame.footer[2] = 0x55;
+
+    UART3_SendFrame(&frame);
+}
+
+6️⃣ RECEIVE ACK / NACK FUNCTION
+bool GUI_GetAckNack(void)
+{
+    uint8_t rxBuf[FRAME_SIZE];
+
+    if (UART3_ReadCountGet() >= FRAME_SIZE)
+    {
+        UART3_Read(rxBuf, FRAME_SIZE);
+
+        UART_Frame_t *rx = (UART_Frame_t *)rxBuf;
+
+        if (rx->msgType == MSG_ACK)
+            return true;
+
+        if (rx->msgType == MSG_NACK)
+            return false;
+    }
+    return false;
+}
+
+7️⃣ RECEIVE FILE FUNCTION (AFTER ACK)
+void GUI_ReceiveFile(uint16_t fileSize)
+{
+    uint16_t received = 0;
+    uint8_t fileBuf[256];
+
+    while (received < fileSize)
+    {
+        if (UART3_ReadCountGet())
+        {
+            uint32_t rx = UART3_Read(fileBuf, sizeof(fileBuf));
+            received += rx;
+
+            // Process / store fileBuf here
+        }
+    }
+}
+
+8️⃣ APPLICATION STATE MACHINE (BEST PRACTICE)
+typedef enum
+{
+    APP_IDLE,
+    APP_WAIT_ACK,
+    APP_RECV_FILE
+} APP_STATE;
+
+static APP_STATE appState = APP_IDLE;
+static uint16_t expectedFileSize = 0;
+
+9️⃣ APP_Tasks() — COMPLETE FLOW
+void APP_Tasks(void)
+{
+    switch (appState)
+    {
+        case APP_IDLE:
+            GUI_SendFileRequest(MSG_FILE_256);   // or MSG_FILE_1024
+            expectedFileSize = 256;
+            appState = APP_WAIT_ACK;
+            break;
+
+        case APP_WAIT_ACK:
+            if (GUI_GetAckNack())
+                appState = APP_RECV_FILE;
+            break;
+
+        case APP_RECV_FILE:
+            GUI_ReceiveFile(expectedFileSize);
+            appState = APP_IDLE;
+            break;
+    }
+}
+
+🔁 EXECUTION ORDER (VERY IMPORTANT)
+1️⃣ PIC32 sends FILE REQUEST (msgType 0x01 / 0x02)
+2️⃣ Qt GUI replies with ACK or NACK
+3️⃣ If ACK → Qt sends file bytes immediately
+4️⃣ PIC32 receives exactly 256 or 1024 bytes
+
+🖥️ Qt GUI EXPECTATION (MINIMAL)
+if (msgType == 0x01) fileSize = 256;
+if (msgType == 0x02) fileSize = 1024;
+
+sendAck();
+sendFile(fileSize);
